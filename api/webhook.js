@@ -11,50 +11,65 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server misconfigured' });
   }
 
-  // Log incoming payload for debugging
   console.log('ElevenLabs payload:', JSON.stringify(req.body, null, 2));
 
-  // Try multiple paths where ElevenLabs might put the data
   const payload = req.body || {};
-  const data = payload.analysis?.data_points
-    || payload.analysis
-    || payload.data
-    || payload.call_id ? {} : payload;  // if it has call_id at root, fields are probably at root too
 
-  // Also check root level for direct tool call parameters
-  const root = payload;
+  // ElevenLabs post_call_transcription sends data at:
+  // data.analysis.data_collection_results.{field_name}.value
+  // Note: some keys have trailing whitespace/tabs from the ElevenLabs dashboard
+  const results = payload.data?.analysis?.data_collection_results || {};
 
-  const ownerName = data.owner_name || root.owner_name || 'Unknown';
-  const propertyAddress = data.property_address || root.property_address || 'Not provided';
-  const availabilityDate = data.availability_date || root.availability_date || 'Not provided';
-  const propertyStatus = data.property_status || root.property_status || 'Not provided';
-  const isFurnished = data.is_furnished ?? root.is_furnished;
-  const furnishedText = isFurnished === true ? 'Yes' : isFurnished === false ? 'No' : String(isFurnished || 'Not provided');
-  const offeringPreference = data.offering_preference || root.offering_preference || 'Not provided';
-  const callbackTime = data.callback_time || root.callback_time || 'Not provided';
+  // Helper: look up a field by name, trimming keys to handle trailing tabs/spaces
+  function getField(fieldName) {
+    // Try exact match first
+    if (results[fieldName]?.value !== undefined && results[fieldName]?.value !== null) {
+      return results[fieldName].value;
+    }
+    // Try trimmed keys (ElevenLabs adds trailing tabs from dashboard copy/paste)
+    for (const [key, val] of Object.entries(results)) {
+      if (key.trim() === fieldName && val?.value !== undefined && val?.value !== null) {
+        return val.value;
+      }
+    }
+    return null;
+  }
 
-  // Include raw payload for debugging
-  const rawPayload = JSON.stringify(payload, null, 2);
+  const ownerName = getField('owner_name') || 'Unknown';
+  const propertyAddress = getField('property_address') || 'Not provided';
+  const availabilityDate = getField('availability_date') || 'Not provided';
+  const propertyStatus = getField('property_status') || 'Not provided';
+  const isFurnished = getField('is_furnished');
+  const furnishedText = isFurnished === true ? 'Yes' : isFurnished === false ? 'No' : 'Not provided';
+  const offeringPreference = getField('offering_preference') || 'Not provided';
+  const callbackTime = getField('callback_time') || 'Not provided';
+  const callerPhone = getField('caller_phone') || 'Not provided';
+
+  // Pull summary and transcript from the payload
+  const summary = payload.data?.analysis?.transcript_summary || '';
+  const conversationId = payload.data?.conversation_id || '';
+  const callDuration = payload.data?.metadata?.call_duration_secs || 0;
+  const callMinutes = Math.floor(callDuration / 60);
+  const callSeconds = callDuration % 60;
 
   const body = `
-    <h3>New Lead Captured via ElevenLabs Call</h3>
+    <h3>New Lead: ${ownerName}</h3>
     <table>
       <tr><td><strong>Owner Name:</strong></td><td>${ownerName}</td></tr>
+      <tr><td><strong>Phone:</strong></td><td>${callerPhone}</td></tr>
       <tr><td><strong>Property Address:</strong></td><td>${propertyAddress}</td></tr>
       <tr><td><strong>Availability Date:</strong></td><td>${availabilityDate}</td></tr>
       <tr><td><strong>Property Status:</strong></td><td>${propertyStatus}</td></tr>
       <tr><td><strong>Furnished:</strong></td><td>${furnishedText}</td></tr>
       <tr><td><strong>Offering Preference:</strong></td><td>${offeringPreference}</td></tr>
       <tr><td><strong>Callback Time:</strong></td><td>${callbackTime}</td></tr>
+      <tr><td><strong>Call Duration:</strong></td><td>${callMinutes}m ${callSeconds}s</td></tr>
     </table>
-    <hr>
-    <details>
-      <summary><strong>Raw Payload (debug)</strong></summary>
-      <pre>${rawPayload}</pre>
-    </details>
+    ${summary ? `<br><strong>Summary:</strong> ${summary}` : ''}
   `.trim();
 
   const subject = `New Lead: ${ownerName} - ${propertyAddress}`;
+  const externalId = conversationId || `call-${Date.now()}`;
 
   try {
     const frontResponse = await fetch(
@@ -74,10 +89,10 @@ export default async function handler(req, res) {
           subject,
           body,
           body_format: 'html',
-          external_id: req.body?.call_id || `call-${Date.now()}`,
+          external_id: externalId,
           created_at: Math.floor(Date.now() / 1000),
           metadata: {
-            thread_ref: req.body?.call_id || `call-${Date.now()}`,
+            thread_ref: externalId,
             is_inbound: true,
           },
         }),
