@@ -1,3 +1,218 @@
+import { google } from 'googleapis';
+
+// Map US states to IANA timezones
+const STATE_TIMEZONES = {
+  'alabama': 'America/Chicago', 'alaska': 'America/Anchorage', 'arizona': 'America/Phoenix',
+  'arkansas': 'America/Chicago', 'california': 'America/Los_Angeles', 'colorado': 'America/Denver',
+  'connecticut': 'America/New_York', 'delaware': 'America/New_York', 'florida': 'America/New_York',
+  'georgia': 'America/New_York', 'hawaii': 'Pacific/Honolulu', 'idaho': 'America/Boise',
+  'illinois': 'America/Chicago', 'indiana': 'America/Indiana/Indianapolis', 'iowa': 'America/Chicago',
+  'kansas': 'America/Chicago', 'kentucky': 'America/New_York', 'louisiana': 'America/Chicago',
+  'maine': 'America/New_York', 'maryland': 'America/New_York', 'massachusetts': 'America/New_York',
+  'michigan': 'America/Detroit', 'minnesota': 'America/Chicago', 'mississippi': 'America/Chicago',
+  'missouri': 'America/Chicago', 'montana': 'America/Denver', 'nebraska': 'America/Chicago',
+  'nevada': 'America/Los_Angeles', 'new hampshire': 'America/New_York', 'new jersey': 'America/New_York',
+  'new mexico': 'America/Denver', 'new york': 'America/New_York', 'north carolina': 'America/New_York',
+  'north dakota': 'America/Chicago', 'ohio': 'America/New_York', 'oklahoma': 'America/Chicago',
+  'oregon': 'America/Los_Angeles', 'pennsylvania': 'America/New_York', 'rhode island': 'America/New_York',
+  'south carolina': 'America/New_York', 'south dakota': 'America/Chicago', 'tennessee': 'America/Chicago',
+  'texas': 'America/Chicago', 'utah': 'America/Denver', 'vermont': 'America/New_York',
+  'virginia': 'America/New_York', 'washington': 'America/Los_Angeles', 'west virginia': 'America/New_York',
+  'wisconsin': 'America/Chicago', 'wyoming': 'America/Denver', 'dc': 'America/New_York',
+  'district of columbia': 'America/New_York',
+  // State abbreviations
+  'al': 'America/Chicago', 'ak': 'America/Anchorage', 'az': 'America/Phoenix',
+  'ar': 'America/Chicago', 'ca': 'America/Los_Angeles', 'co': 'America/Denver',
+  'ct': 'America/New_York', 'de': 'America/New_York', 'fl': 'America/New_York',
+  'ga': 'America/New_York', 'hi': 'Pacific/Honolulu', 'id': 'America/Boise',
+  'il': 'America/Chicago', 'in': 'America/Indiana/Indianapolis', 'ia': 'America/Chicago',
+  'ks': 'America/Chicago', 'ky': 'America/New_York', 'la': 'America/Chicago',
+  'me': 'America/New_York', 'md': 'America/New_York', 'ma': 'America/New_York',
+  'mi': 'America/Detroit', 'mn': 'America/Chicago', 'ms': 'America/Chicago',
+  'mo': 'America/Chicago', 'mt': 'America/Denver', 'ne': 'America/Chicago',
+  'nv': 'America/Los_Angeles', 'nh': 'America/New_York', 'nj': 'America/New_York',
+  'nm': 'America/Denver', 'ny': 'America/New_York', 'nc': 'America/New_York',
+  'nd': 'America/Chicago', 'oh': 'America/New_York', 'ok': 'America/Chicago',
+  'or': 'America/Los_Angeles', 'pa': 'America/New_York', 'ri': 'America/New_York',
+  'sc': 'America/New_York', 'sd': 'America/Chicago', 'tn': 'America/Chicago',
+  'tx': 'America/Chicago', 'ut': 'America/Denver', 'vt': 'America/New_York',
+  'va': 'America/New_York', 'wa': 'America/Los_Angeles', 'wv': 'America/New_York',
+  'wi': 'America/Chicago', 'wy': 'America/Denver',
+};
+
+// Map spoken timezone names to IANA
+const SPOKEN_TIMEZONES = {
+  'eastern': 'America/New_York', 'est': 'America/New_York', 'et': 'America/New_York',
+  'central': 'America/Chicago', 'cst': 'America/Chicago', 'ct': 'America/Chicago',
+  'mountain': 'America/Denver', 'mst': 'America/Denver', 'mt': 'America/Denver',
+  'pacific': 'America/Los_Angeles', 'pst': 'America/Los_Angeles', 'pt': 'America/Los_Angeles',
+  'alaska': 'America/Anchorage', 'hawaii': 'Pacific/Honolulu',
+};
+
+function getTimezoneFromSpoken(spokenTz) {
+  if (!spokenTz) return null;
+  const lower = spokenTz.toLowerCase().trim();
+  for (const [key, tz] of Object.entries(SPOKEN_TIMEZONES)) {
+    if (lower.includes(key)) return tz;
+  }
+  return null;
+}
+
+function getTimezoneFromAddress(address) {
+  if (!address) return 'America/Denver';
+  const parts = address.toLowerCase().split(/[,\s]+/);
+  for (const part of parts.reverse()) {
+    if (STATE_TIMEZONES[part.trim()]) return STATE_TIMEZONES[part.trim()];
+  }
+  const lower = address.toLowerCase();
+  for (const [state, tz] of Object.entries(STATE_TIMEZONES)) {
+    if (state.includes(' ') && lower.includes(state)) return tz;
+  }
+  return 'America/Denver';
+}
+
+function parseCallbackToDateTime(callbackTime, timezone) {
+  // Get current date in the property's timezone
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+  const parts = Object.fromEntries(
+    formatter.formatToParts(now).map(p => [p.type, p.value])
+  );
+  const todayLocal = new Date(`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:00`);
+
+  const lower = (callbackTime || '').toLowerCase().trim();
+  if (!lower || lower === 'not provided') return null;
+
+  let targetDate = new Date(todayLocal);
+
+  // Parse relative days
+  if (lower.includes('tomorrow')) {
+    targetDate.setDate(targetDate.getDate() + 1);
+  } else if (lower.includes('next week')) {
+    targetDate.setDate(targetDate.getDate() + 7);
+  } else if (lower.includes('monday')) {
+    const day = targetDate.getDay();
+    targetDate.setDate(targetDate.getDate() + ((1 - day + 7) % 7 || 7));
+  } else if (lower.includes('tuesday')) {
+    const day = targetDate.getDay();
+    targetDate.setDate(targetDate.getDate() + ((2 - day + 7) % 7 || 7));
+  } else if (lower.includes('wednesday')) {
+    const day = targetDate.getDay();
+    targetDate.setDate(targetDate.getDate() + ((3 - day + 7) % 7 || 7));
+  } else if (lower.includes('thursday')) {
+    const day = targetDate.getDay();
+    targetDate.setDate(targetDate.getDate() + ((4 - day + 7) % 7 || 7));
+  } else if (lower.includes('friday')) {
+    const day = targetDate.getDay();
+    targetDate.setDate(targetDate.getDate() + ((5 - day + 7) % 7 || 7));
+  } else {
+    // Default to tomorrow if we can't parse the day
+    targetDate.setDate(targetDate.getDate() + 1);
+  }
+
+  // Parse time
+  let hour = 10; // default 10am
+  let minute = 0;
+
+  const noonMatch = lower.includes('noon') || lower.includes('12 pm') || lower.includes('12pm');
+  const timeMatch = lower.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?/i);
+
+  if (noonMatch) {
+    hour = 12;
+  } else if (timeMatch) {
+    hour = parseInt(timeMatch[1]);
+    minute = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
+    const meridiem = timeMatch[3]?.toLowerCase().replace(/\./g, '');
+    if (meridiem === 'pm' && hour < 12) hour += 12;
+    if (meridiem === 'am' && hour === 12) hour = 0;
+  } else if (lower.includes('morning')) {
+    hour = 9;
+  } else if (lower.includes('afternoon')) {
+    hour = 14;
+  } else if (lower.includes('evening')) {
+    hour = 17;
+  }
+
+  targetDate.setHours(hour, minute, 0, 0);
+
+  // Format as YYYY-MM-DDTHH:MM:SS
+  const y = targetDate.getFullYear();
+  const m = String(targetDate.getMonth() + 1).padStart(2, '0');
+  const d = String(targetDate.getDate()).padStart(2, '0');
+  const h = String(targetDate.getHours()).padStart(2, '0');
+  const min = String(targetDate.getMinutes()).padStart(2, '0');
+
+  return `${y}-${m}-${d}T${h}:${min}:00`;
+}
+
+async function createCalendarEvent({ ownerName, propertyAddress, callbackTime, callerPhone, offeringPreference, summary, timezone }) {
+  const GOOGLE_CREDENTIALS = process.env.GOOGLE_CREDENTIALS;
+  const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID;
+
+  if (!GOOGLE_CREDENTIALS || !GOOGLE_CALENDAR_ID) {
+    console.log('Google Calendar not configured, skipping event creation');
+    return null;
+  }
+
+  const dateTime = parseCallbackToDateTime(callbackTime, timezone);
+  if (!dateTime) {
+    console.log('Could not parse callback time, skipping calendar event');
+    return null;
+  }
+
+  try {
+    const credentials = JSON.parse(GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ['https://www.googleapis.com/auth/calendar.events'],
+    });
+
+    const calendar = google.calendar({ version: 'v3', auth });
+
+    const endDateTime = new Date(dateTime);
+    endDateTime.setMinutes(endDateTime.getMinutes() + 30);
+    const endStr = `${endDateTime.getFullYear()}-${String(endDateTime.getMonth() + 1).padStart(2, '0')}-${String(endDateTime.getDate()).padStart(2, '0')}T${String(endDateTime.getHours()).padStart(2, '0')}:${String(endDateTime.getMinutes()).padStart(2, '0')}:00`;
+
+    const event = {
+      summary: `Callback: ${ownerName}`,
+      description: [
+        `Owner: ${ownerName}`,
+        `Phone: ${callerPhone}`,
+        `Property: ${propertyAddress}`,
+        `Preference: ${offeringPreference}`,
+        `Timezone: ${timezone}`,
+        '',
+        `Requested callback: ${callbackTime}`,
+        '',
+        summary ? `Call Summary: ${summary}` : '',
+      ].filter(Boolean).join('\n'),
+      start: { dateTime, timeZone: timezone },
+      end: { dateTime: endStr, timeZone: timezone },
+      reminders: {
+        useDefault: false,
+        overrides: [
+          { method: 'popup', minutes: 15 },
+        ],
+      },
+    };
+
+    const result = await calendar.events.insert({
+      calendarId: GOOGLE_CALENDAR_ID,
+      requestBody: event,
+    });
+
+    console.log('Calendar event created:', result.data.htmlLink);
+    return result.data;
+  } catch (err) {
+    console.error('Calendar event error:', err.message);
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -21,18 +236,12 @@ export default async function handler(req, res) {
     return res.status(200).json({ status: 'skipped', reason: `Ignoring event type: ${payload.type}` });
   }
 
-  // ElevenLabs post_call_transcription sends data at:
-  // data.analysis.data_collection_results.{field_name}.value
-  // Note: some keys have trailing whitespace/tabs from the ElevenLabs dashboard
   const results = payload.data?.analysis?.data_collection_results || {};
 
-  // Helper: look up a field by name, trimming keys to handle trailing tabs/spaces
   function getField(fieldName) {
-    // Try exact match first
     if (results[fieldName]?.value !== undefined && results[fieldName]?.value !== null) {
       return results[fieldName].value;
     }
-    // Try trimmed keys (ElevenLabs adds trailing tabs from dashboard copy/paste)
     for (const [key, val] of Object.entries(results)) {
       if (key.trim() === fieldName && val?.value !== undefined && val?.value !== null) {
         return val.value;
@@ -50,13 +259,29 @@ export default async function handler(req, res) {
   const offeringPreference = getField('offering_preference') || 'Not provided';
   const callbackTime = getField('callback_time') || 'Not provided';
   const callerPhone = getField('caller_phone') || 'Not provided';
+  const callerTimezone = getField('caller_timezone') || '';
 
-  // Pull summary and transcript from the payload
   const summary = payload.data?.analysis?.transcript_summary || '';
   const conversationId = payload.data?.conversation_id || '';
   const callDuration = payload.data?.metadata?.call_duration_secs || 0;
   const callMinutes = Math.floor(callDuration / 60);
   const callSeconds = callDuration % 60;
+
+  // Determine timezone: prefer caller's stated timezone, fall back to property address state
+  const timezone = getTimezoneFromSpoken(callerTimezone) || getTimezoneFromAddress(propertyAddress);
+
+  // Create Google Calendar event for callback
+  let calendarEvent = null;
+  if (callbackTime && callbackTime !== 'Not provided') {
+    calendarEvent = await createCalendarEvent({
+      ownerName, propertyAddress, callbackTime, callerPhone,
+      offeringPreference, summary, timezone,
+    });
+  }
+
+  const calendarLine = calendarEvent
+    ? `<br><strong>Calendar Event:</strong> <a href="${calendarEvent.htmlLink}">View in Google Calendar</a>`
+    : '';
 
   const body = `
     <h3>New Lead: ${ownerName}</h3>
@@ -68,10 +293,11 @@ export default async function handler(req, res) {
       <tr><td><strong>Property Status:</strong></td><td>${propertyStatus}</td></tr>
       <tr><td><strong>Furnished:</strong></td><td>${furnishedText}</td></tr>
       <tr><td><strong>Offering Preference:</strong></td><td>${offeringPreference}</td></tr>
-      <tr><td><strong>Callback Time:</strong></td><td>${callbackTime}</td></tr>
+      <tr><td><strong>Callback Time:</strong></td><td>${callbackTime} (${timezone})</td></tr>
       <tr><td><strong>Call Duration:</strong></td><td>${callMinutes}m ${callSeconds}s</td></tr>
     </table>
     ${summary ? `<br><strong>Summary:</strong> ${summary}` : ''}
+    ${calendarLine}
   `.trim();
 
   const subject = `New Lead: ${ownerName} - ${propertyAddress}`;
@@ -113,7 +339,11 @@ export default async function handler(req, res) {
 
     const result = await frontResponse.json();
     console.log('Front API success:', JSON.stringify(result));
-    return res.status(200).json({ status: 'success', front_response: result });
+    return res.status(200).json({
+      status: 'success',
+      front_response: result,
+      calendar_event: calendarEvent ? { link: calendarEvent.htmlLink } : null,
+    });
   } catch (err) {
     console.error('Error sending to Front:', err.message);
     return res.status(500).json({ error: 'Internal server error', message: err.message });

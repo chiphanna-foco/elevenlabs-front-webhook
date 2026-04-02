@@ -2,5 +2,8 @@
   "name": "elevenlabs-front-webhook",
   "version": "1.0.0",
   "private": true,
-  "description": "Webhook bridge: ElevenLabs post-call analysis → Front inbox"
+  "description": "Webhook bridge: ElevenLabs post-call analysis → Front inbox",
+  "dependencies": {
+    "googleapis": "^171.4.0"
+  }
 }
