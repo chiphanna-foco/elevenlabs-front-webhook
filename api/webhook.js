@@ -55,11 +55,15 @@ export default async function handler(req, res) {
             handle: 'elevenlabs-calls@turbotenant.com',
             name: 'ElevenLabs Call Bot',
           },
+          to: [],
           subject,
           body,
           body_format: 'html',
+          external_id: req.body?.call_id || `call-${Date.now()}`,
+          created_at: Math.floor(Date.now() / 1000),
           metadata: {
             thread_ref: req.body?.call_id || `call-${Date.now()}`,
+            is_inbound: true,
           },
         }),
       }
