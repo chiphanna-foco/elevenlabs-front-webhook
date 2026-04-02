@@ -52,7 +52,7 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           sender: {
-            handle: 'elevenlabs-calls@turbotenant.com',
+            handle: 'elevenlabs-calls@ziprent.com',
             name: 'ElevenLabs Call Bot',
           },
           to: ['chip@turbotenant.com'],
