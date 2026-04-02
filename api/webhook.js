@@ -14,17 +14,27 @@ export default async function handler(req, res) {
   // Log incoming payload for debugging
   console.log('ElevenLabs payload:', JSON.stringify(req.body, null, 2));
 
-  // Extract data points from ElevenLabs post-call analysis
-  const data = req.body?.analysis?.data_points || req.body?.data || req.body || {};
+  // Try multiple paths where ElevenLabs might put the data
+  const payload = req.body || {};
+  const data = payload.analysis?.data_points
+    || payload.analysis
+    || payload.data
+    || payload.call_id ? {} : payload;  // if it has call_id at root, fields are probably at root too
 
-  const ownerName = data.owner_name || 'Unknown';
-  const propertyAddress = data.property_address || 'Not provided';
-  const availabilityDate = data.availability_date || 'Not provided';
-  const propertyStatus = data.property_status || 'Not provided';
-  const isFurnished = data.is_furnished;
-  const furnishedText = isFurnished === true ? 'Yes' : isFurnished === false ? 'No' : 'Not provided';
-  const offeringPreference = data.offering_preference || 'Not provided';
-  const callbackTime = data.callback_time || 'Not provided';
+  // Also check root level for direct tool call parameters
+  const root = payload;
+
+  const ownerName = data.owner_name || root.owner_name || 'Unknown';
+  const propertyAddress = data.property_address || root.property_address || 'Not provided';
+  const availabilityDate = data.availability_date || root.availability_date || 'Not provided';
+  const propertyStatus = data.property_status || root.property_status || 'Not provided';
+  const isFurnished = data.is_furnished ?? root.is_furnished;
+  const furnishedText = isFurnished === true ? 'Yes' : isFurnished === false ? 'No' : String(isFurnished || 'Not provided');
+  const offeringPreference = data.offering_preference || root.offering_preference || 'Not provided';
+  const callbackTime = data.callback_time || root.callback_time || 'Not provided';
+
+  // Include raw payload for debugging
+  const rawPayload = JSON.stringify(payload, null, 2);
 
   const body = `
     <h3>New Lead Captured via ElevenLabs Call</h3>
@@ -37,6 +47,11 @@ export default async function handler(req, res) {
       <tr><td><strong>Offering Preference:</strong></td><td>${offeringPreference}</td></tr>
       <tr><td><strong>Callback Time:</strong></td><td>${callbackTime}</td></tr>
     </table>
+    <hr>
+    <details>
+      <summary><strong>Raw Payload (debug)</strong></summary>
+      <pre>${rawPayload}</pre>
+    </details>
   `.trim();
 
   const subject = `New Lead: ${ownerName} - ${propertyAddress}`;
