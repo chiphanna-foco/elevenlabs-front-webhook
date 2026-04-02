@@ -55,7 +55,7 @@ export default async function handler(req, res) {
             handle: 'elevenlabs-calls@ziprent.com',
             name: 'ElevenLabs Call Bot',
           },
-          to: ['chip@turbotenant.com'],
+          to: ['start@ziprent.com'],
           subject,
           body,
           body_format: 'html',
