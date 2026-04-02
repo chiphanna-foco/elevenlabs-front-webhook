@@ -11,9 +11,15 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server misconfigured' });
   }
 
-  console.log('ElevenLabs payload:', JSON.stringify(req.body, null, 2));
+  console.log('ElevenLabs event type:', req.body?.type);
 
   const payload = req.body || {};
+
+  // Only process post_call_transcription events (ignore post_call_audio, etc.)
+  if (payload.type && payload.type !== 'post_call_transcription') {
+    console.log(`Ignoring event type: ${payload.type}`);
+    return res.status(200).json({ status: 'skipped', reason: `Ignoring event type: ${payload.type}` });
+  }
 
   // ElevenLabs post_call_transcription sends data at:
   // data.analysis.data_collection_results.{field_name}.value
