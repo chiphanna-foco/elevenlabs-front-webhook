@@ -260,6 +260,7 @@ export default async function handler(req, res) {
   const offeringPreference = getField('offering_preference') || 'Not provided';
   const callbackTime = getField('callback_time') || 'Not provided';
   const callerPhone = getField('caller_phone') || 'Not provided';
+  const callerEmail = getField('caller_email') || 'Not provided';
   const callerTimezone = getField('caller_timezone') || '';
 
   const summary = payload.data?.analysis?.transcript_summary || '';
@@ -288,6 +289,7 @@ export default async function handler(req, res) {
     <h3>New Lead: ${ownerName}</h3>
     <table>
       <tr><td><strong>Owner Name:</strong></td><td>${ownerName}</td></tr>
+      <tr><td><strong>Email:</strong></td><td>${callerEmail}</td></tr>
       <tr><td><strong>Phone:</strong></td><td>${callerPhone}</td></tr>
       <tr><td><strong>Property Address:</strong></td><td>${propertyAddress}</td></tr>
       <tr><td><strong>Availability Date:</strong></td><td>${availabilityDate}</td></tr>
