@@ -224,8 +224,10 @@ async function createCalendarEvent({ ownerName, callerEmail, callerPhone, proper
     console.log('Calendar event created:', result.data.htmlLink);
     return result.data;
   } catch (err) {
-    console.error('Calendar event error:', err.message, err.stack);
-    return { error: err.message };
+    console.error('Calendar event error:', err.message);
+    console.error('Calendar error details:', JSON.stringify(err.response?.data || err.errors || {}));
+    console.error('Calendar error code:', err.code);
+    return { error: err.message, details: err.response?.data || null, code: err.code };
   }
 }
 
