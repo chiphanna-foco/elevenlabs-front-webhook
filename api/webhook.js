@@ -149,7 +149,7 @@ function parseCallbackToDateTime(callbackTime, timezone) {
   return `${y}-${m}-${d}T${h}:${min}:00`;
 }
 
-async function createCalendarEvent({ ownerName, propertyAddress, callbackTime, callerPhone, offeringPreference, summary, timezone }) {
+async function createCalendarEvent({ ownerName, callerEmail, callerPhone, propertyAddress, availabilityDate, propertyStatus, furnishedText, offeringPreference, callbackTime, summary, timezone }) {
   const GOOGLE_CREDENTIALS = process.env.GOOGLE_CREDENTIALS;
   const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID;
 
@@ -181,15 +181,23 @@ async function createCalendarEvent({ ownerName, propertyAddress, callbackTime, c
     const event = {
       summary: `Callback: ${ownerName}`,
       description: [
-        `Owner: ${ownerName}`,
+        `OWNER DETAILS`,
+        `Name: ${ownerName}`,
+        `Email: ${callerEmail}`,
         `Phone: ${callerPhone}`,
-        `Property: ${propertyAddress}`,
-        `Preference: ${offeringPreference}`,
         `Timezone: ${timezone}`,
         '',
+        `PROPERTY DETAILS`,
+        `Address: ${propertyAddress}`,
+        `Availability: ${availabilityDate}`,
+        `Status: ${propertyStatus}`,
+        `Furnished: ${furnishedText}`,
+        '',
+        `NEXT STEPS`,
+        `Offering Preference: ${offeringPreference}`,
         `Requested callback: ${callbackTime}`,
         '',
-        summary ? `Call Summary: ${summary}` : '',
+        summary ? `CALL SUMMARY\n${summary}` : '',
       ].filter(Boolean).join('\n'),
       start: { dateTime, timeZone: timezone },
       end: { dateTime: endStr, timeZone: timezone },
@@ -276,8 +284,9 @@ export default async function handler(req, res) {
   let calendarEvent = null;
   if (callbackTime && callbackTime !== 'Not provided') {
     calendarEvent = await createCalendarEvent({
-      ownerName, propertyAddress, callbackTime, callerPhone,
-      offeringPreference, summary, timezone,
+      ownerName, callerEmail, callerPhone, propertyAddress,
+      availabilityDate, propertyStatus, furnishedText,
+      offeringPreference, callbackTime, summary, timezone,
     });
   }
 
