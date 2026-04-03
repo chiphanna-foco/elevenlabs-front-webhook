@@ -227,7 +227,7 @@ async function createCalendarEvent({ ownerName, callerEmail, callerPhone, proper
     console.error('Calendar event error:', err.message);
     console.error('Calendar error details:', JSON.stringify(err.response?.data || err.errors || {}));
     console.error('Calendar error code:', err.code);
-    return { error: err.message, details: err.response?.data || null, code: err.code };
+    return { error: err.message, details: err.response?.data || null, code: err.code, calendarId: GOOGLE_CALENDAR_ID };
   }
 }
 
