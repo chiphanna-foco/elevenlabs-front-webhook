@@ -166,7 +166,14 @@ async function createCalendarEvent({ ownerName, callerEmail, callerPhone, proper
   }
 
   try {
-    const credentials = JSON.parse(GOOGLE_CREDENTIALS);
+    // Credentials may be base64-encoded or raw JSON
+    let credStr = GOOGLE_CREDENTIALS;
+    try {
+      JSON.parse(credStr);
+    } catch {
+      credStr = Buffer.from(credStr, 'base64').toString('utf-8');
+    }
+    const credentials = JSON.parse(credStr);
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: ['https://www.googleapis.com/auth/calendar.events'],
