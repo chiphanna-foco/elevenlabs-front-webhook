@@ -154,9 +154,10 @@ async function createCalendarEvent({ ownerName, propertyAddress, callbackTime, c
   const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID;
 
   if (!GOOGLE_CREDENTIALS || !GOOGLE_CALENDAR_ID) {
-    console.log('Google Calendar not configured, skipping event creation');
+    console.log('Google Calendar not configured. CREDENTIALS:', !!GOOGLE_CREDENTIALS, 'CALENDAR_ID:', !!GOOGLE_CALENDAR_ID);
     return null;
   }
+  console.log('Google Calendar configured. Calendar ID:', GOOGLE_CALENDAR_ID.substring(0, 20) + '...');
 
   const dateTime = parseCallbackToDateTime(callbackTime, timezone);
   if (!dateTime) {
@@ -208,8 +209,8 @@ async function createCalendarEvent({ ownerName, propertyAddress, callbackTime, c
     console.log('Calendar event created:', result.data.htmlLink);
     return result.data;
   } catch (err) {
-    console.error('Calendar event error:', err.message);
-    return null;
+    console.error('Calendar event error:', err.message, err.stack);
+    return { error: err.message };
   }
 }
 
@@ -342,7 +343,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       status: 'success',
       front_response: result,
-      calendar_event: calendarEvent ? { link: calendarEvent.htmlLink } : null,
+      calendar_event: calendarEvent?.htmlLink ? { link: calendarEvent.htmlLink } : calendarEvent,
     });
   } catch (err) {
     console.error('Error sending to Front:', err.message);
